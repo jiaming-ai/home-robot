@@ -64,12 +64,17 @@ def get_similarity(
     view_matching_config: ViewMatchingConfig = ViewMatchingConfig(),
 ):
     # BBox similarity
-    overlap_similarity = get_bbox_similarity(
-        instance_bounds1,
-        instance_bounds2,
-        overlap_eps=view_matching_config.box_overlap_eps,
-        mode=view_matching_config.box_match_mode,
-    )
+    # TODO handles the exception where area is 0 more properly
+    try:
+        overlap_similarity = get_bbox_similarity(
+            instance_bounds1,
+            instance_bounds2,
+            overlap_eps=view_matching_config.box_overlap_eps,
+            mode=view_matching_config.box_match_mode,
+        )
+    except Exception as e:
+        logger.error(f"Error in get_bbox_similarity: {e}")
+        overlap_similarity = 0
 
     similarity = overlap_similarity * view_matching_config.box_overlap_weight
 
@@ -593,6 +598,7 @@ class InstanceMemory:
         valid_points: Optional[Tensor] = None,
         pose: Optional[Tensor] = None,
         encoder: Optional[ClipEncoder] = None,
+        feat: Optional[Tensor] = None,
     ):
         """
         Process instance information in the current frame and add instance views to the list of unprocessed views for future association.
@@ -616,6 +622,7 @@ class InstanceMemory:
             background_instance_labels (List[int]): ids indicating background points in instance_seg. That view is not saved. (default = 0)
             valid_points (Tensor): [H, W] boolean tensor indicating valid points in the pointcloud
             pose: (Optional[Tensor]): base pose of the agent at this timestep
+            feat: (Optional[Tensor]): [K, D] feature tensor for the instance
         Note:
             - The method creates instance views for detected instances within the provided data.
             - If a semantic segmentation tensor is provided, each instance is associated with a semantic category.
@@ -743,7 +750,9 @@ class InstanceMemory:
             # instance_mask = instance_mask.bool()
 
             # get embedding
-            if encoder is not None:
+            if feat is not None:
+                embedding = feat[instance_id].unsqueeze(0) #
+            elif encoder is not None:
                 embedding = encoder.encode_image(cropped_image).to(cropped_image.device)
             else:
                 embedding = None

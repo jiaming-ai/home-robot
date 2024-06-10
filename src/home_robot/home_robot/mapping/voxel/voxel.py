@@ -119,6 +119,7 @@ class SparseVoxelMap(object):
         max_depth: float = 4.0,
         pad_obstacles: int = 0,
         background_instance_label: int = -1,
+        background_class_label: int = -1,
         instance_memory_kwargs: Dict[str, Any] = {},
         voxel_kwargs: Dict[str, Any] = {},
         encoder: Optional[ClipEncoder] = None,
@@ -145,7 +146,7 @@ class SparseVoxelMap(object):
                 .unsqueeze(0)
                 .float(),
                 requires_grad=False,
-            )
+            ).to(map_2d_device)
         else:
             self.smooth_kernel = None
         self.grid_resolution = grid_resolution
@@ -154,6 +155,7 @@ class SparseVoxelMap(object):
         self.max_depth = max_depth
         self.pad_obstacles = pad_obstacles
         self.background_instance_label = background_instance_label
+        self.background_class_label = background_class_label
         self.instance_memory_kwargs = update(
             copy.deepcopy(self.DEFAULT_INSTANCE_MAP_KWARGS), instance_memory_kwargs
         )
@@ -169,7 +171,7 @@ class SparseVoxelMap(object):
                 .unsqueeze(0)
                 .float(),
                 requires_grad=False,
-            )
+            ).to(map_2d_device)
         else:
             self.dilate_obstacles_kernel = None
 
@@ -190,11 +192,11 @@ class SparseVoxelMap(object):
             self.grid_size = DEFAULT_GRID_SIZE
         # Track the center of the grid - (0, 0) in our coordinate system
         # We then just need to update everything when we want to track obstacles
-        self.grid_origin = Tensor(self.grid_size + [0], device=map_2d_device) // 2
+        self.grid_origin = torch.tensor(self.grid_size + [0], device=map_2d_device) // 2
         # Used to track the offset from our observations so maps dont use too much space
 
         # Used for tensorized bounds checks
-        self._grid_size_t = Tensor(self.grid_size, device=map_2d_device)
+        self._grid_size_t = torch.tensor(self.grid_size, device=map_2d_device)
 
         # Init variables
         self.reset()
@@ -303,8 +305,10 @@ class SparseVoxelMap(object):
         instance_image: Optional[Tensor] = None,
         instance_classes: Optional[Tensor] = None,
         instance_scores: Optional[Tensor] = None,
+        instance_feats: Optional[Tensor] = None,
         obs: Optional[Observations] = None,
         xyz_frame: str = "camera",
+        add_to_observations: bool = True,
         **info,
     ):
         """Add this to our history of observations. Also update the current running map.
@@ -396,24 +400,25 @@ class SparseVoxelMap(object):
             )
 
         # add observations before we start changing things
-        self.observations.append(
-            Frame(
-                camera_pose,
-                camera_K,
-                xyz,
-                rgb,
-                feats,
-                depth,
-                instance_image,
-                instance_classes,
-                instance_scores,
-                base_pose,
-                info,
-                obs,
-                full_world_xyz,
-                xyz_frame=xyz_frame,
+        if add_to_observations:
+            self.observations.append(
+                Frame(
+                    camera_pose,
+                    camera_K,
+                    xyz,
+                    rgb,
+                    feats,
+                    depth,
+                    instance_image,
+                    instance_classes,
+                    instance_scores,
+                    base_pose,
+                    info,
+                    obs,
+                    full_world_xyz,
+                    xyz_frame=xyz_frame,
+                )
             )
-        )
 
         # filter depth
         valid_depth = torch.full_like(rgb[:, 0], fill_value=True, dtype=torch.bool)
@@ -433,13 +438,15 @@ class SparseVoxelMap(object):
                 instance_classes=instance_classes,
                 instance_scores=instance_scores,
                 background_instance_labels=[self.background_instance_label],
+                background_class_labels=[self.background_class_label],
                 valid_points=valid_depth,
                 pose=base_pose,
                 encoder=self.encoder,
+                feat=instance_feats,
             )
             self.instances.associate_instances_to_memory()
 
-        # Add to voxel grid
+        # Add to voxel grid        
         if feats is not None:
             feats = feats[valid_depth].reshape(-1, feats.shape[-1])
         rgb = rgb[valid_depth].reshape(-1, 3)
@@ -470,7 +477,7 @@ class SparseVoxelMap(object):
         if debug:
             import matplotlib.pyplot as plt
 
-            plt.imshow(obstacles.int() + explored.int() + mask.int())
+            plt.imshow(obstacles.cpu().int() + explored.cpu().int() + mask.cpu().int())
         return mask
 
     def _update_visited(self, base_pose: Tensor):
@@ -747,7 +754,7 @@ class SparseVoxelMap(object):
             xy = torch.from_numpy(xy).float()
         grid_xy = (xy / self.grid_resolution) + self.grid_origin[:2]
         if torch.any(grid_xy >= self._grid_size_t) or torch.any(
-            grid_xy < torch.zeros(2)
+            grid_xy < 0
         ):
             return None
         else:
