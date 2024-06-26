@@ -8,6 +8,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
+import cv2
 import numpy as np
 import torch
 from torch import Tensor
@@ -62,6 +63,22 @@ class InstanceView:
     pose: Tensor = None
     """ Base pose of the robot when this view was collected"""
 
+    obs_idx: Optional[int] = None
+    
+    def draw_bbox(self,image, color=(0, 255, 0)):
+        bbox = self.bbox
+        bbox = bbox.cpu().numpy().astype(int)
+        x1, y1 = bbox[0]
+        x2, y2 = bbox[1]
+        enlarge = 12
+        x1 = max(0, x1 - enlarge)
+        y1 = max(0, y1 - enlarge)
+        x2 = min(image.shape[0], x2 + enlarge)
+        y2 = min(image.shape[1], y2 + enlarge)
+        cv2.rectangle(image, (y1, x1), (y2, x2), color, 1)
+        # cv2.rectangle(image, (bbox[0,1], bbox[0,0]), (bbox[1,1], bbox[1,0]), color, 2)
+        return image
+    
     @cached_property
     def object_coverage(self):
         return float(self.mask.sum()) / self.mask.size
@@ -136,6 +153,10 @@ class Instance:
             emb = emb / emb.norm(dim=-1, keepdim=True)
         return emb
 
+    def get_obs_idxs(self):
+        """Get the observation indices of all views in this instance."""
+        return [view.obs_idx for view in self.instance_views]
+    
     def get_best_view(self, metric: str = "area") -> InstanceView:
         """Get best view by some metric."""
         best_view = None

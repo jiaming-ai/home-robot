@@ -198,12 +198,14 @@ class SparseVoxelMap(object):
         # Used for tensorized bounds checks
         self._grid_size_t = torch.tensor(self.grid_size, device=map_2d_device)
 
+        self._rgbs = []
         # Init variables
         self.reset()
 
     def reset(self) -> None:
         """Clear out the entire voxel map."""
         self.observations = []
+        self._rgbs = []
         # Create an instance memory to associate bounding boxes in space
         self.instances = InstanceMemory(
             num_envs=1,
@@ -292,6 +294,32 @@ class SparseVoxelMap(object):
             *args,
             **kwargs,
         )
+
+    def get_obs_for_instance(self, 
+                             instance: Instance, 
+                             draw_bbox=True,
+                             debug=False,
+                             col=2):
+        """Get all observations for a given instance"""
+        obs_idx = instance.get_obs_idxs()
+        obs = [(self._rgbs[i] * 255).astype(np.uint8) for i in obs_idx]
+
+        if draw_bbox:
+            for i, view in enumerate(instance.instance_views):
+                view.draw_bbox(obs[i])
+
+        if debug:
+            import matplotlib.pyplot as plt
+            row = len(obs) // col
+            if len(obs) % col > 0:
+                row += 1
+            fig, axs = plt.subplots(row, col, figsize=(15, 15))
+            for i, ax in enumerate(axs.flat):
+                if i < len(obs):
+                    ax.imshow(obs[i])
+                ax.axis("off")
+            plt.show()
+        return obs
 
     def add(
         self,
@@ -399,6 +427,9 @@ class SparseVoxelMap(object):
                 inv_intrinsics=torch.linalg.inv(camera_K[:3, :3]).unsqueeze(0),
             )
 
+        self._rgbs.append(rgb.cpu().numpy())
+        rgb_idx = len(self._rgbs) - 1
+        
         # add observations before we start changing things
         if add_to_observations:
             self.observations.append(
@@ -443,6 +474,7 @@ class SparseVoxelMap(object):
                 pose=base_pose,
                 encoder=self.encoder,
                 feat=instance_feats,
+                obs_idx=rgb_idx,
             )
             self.instances.associate_instances_to_memory()
 

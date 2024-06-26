@@ -347,6 +347,10 @@ class InstanceMemory:
                     )
                 else:
                     instance_view_embedding = None
+                
+                # TODO: filter instance based on bounding box with minimum overlap
+                # or instances close to the target instance
+                # filter by category id is not a good idea, since the detector may not be perfect
                 global_ids_to_instances = self.get_ids_to_instances(
                     env_id, category_id=match_category_id
                 )
@@ -599,6 +603,7 @@ class InstanceMemory:
         pose: Optional[Tensor] = None,
         encoder: Optional[ClipEncoder] = None,
         feat: Optional[Tensor] = None,
+        obs_idx: Optional[int] = None,
     ):
         """
         Process instance information in the current frame and add instance views to the list of unprocessed views for future association.
@@ -623,6 +628,7 @@ class InstanceMemory:
             valid_points (Tensor): [H, W] boolean tensor indicating valid points in the pointcloud
             pose: (Optional[Tensor]): base pose of the agent at this timestep
             feat: (Optional[Tensor]): [K, D] feature tensor for the instance
+            obs_idx: (Optional[int]): index of the observation in the episode
         Note:
             - The method creates instance views for detected instances within the provided data.
             - If a semantic segmentation tensor is provided, each instance is associated with a semantic category.
@@ -794,6 +800,7 @@ class InstanceMemory:
                         score=score,
                         bounds=bounds,  # .cpu().numpy(),
                         pose=pose,
+                        obs_idx=obs_idx,
                     )
                     # append instance view to list of instance views
                     self.unprocessed_views[env_id][instance_id.item()] = instance_view
