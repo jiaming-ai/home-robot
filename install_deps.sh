@@ -62,14 +62,14 @@ else
 fi
 
 # Run the data downloader script
-bash $HOME_ROBOT_ROOT/download_data.sh
+# bash $HOME_ROBOT_ROOT/download_data.sh
 
 echo ""
 if [ "$data_only" = false ]; then
 	echo "Install home_robot core..."
 	python -m pip install -e src/home_robot
-	echo "Install home_robot ROS..."
-	python -m pip install -e src/home_robot_hw
+	# echo "Install home_robot ROS..."
+	# python -m pip install -e src/home_robot_hw
 else
 	echo "Skipping home_robot installs because data_only=$data_only"
 fi
