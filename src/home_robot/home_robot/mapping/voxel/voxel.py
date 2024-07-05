@@ -295,11 +295,9 @@ class SparseVoxelMap(object):
             **kwargs,
         )
 
-    def get_obs_for_instance(self, 
-                             instance: Instance, 
-                             draw_bbox=True,
-                             debug=False,
-                             col=2):
+    def get_obs_for_instance(
+        self, instance: Instance, draw_bbox=True, debug=False, col=2
+    ):
         """Get all observations for a given instance"""
         obs_idx = instance.get_obs_idxs()
         obs = [(self._rgbs[i] * 255).astype(np.uint8) for i in obs_idx]
@@ -310,6 +308,7 @@ class SparseVoxelMap(object):
 
         if debug:
             import matplotlib.pyplot as plt
+
             row = len(obs) // col
             if len(obs) % col > 0:
                 row += 1
@@ -429,7 +428,7 @@ class SparseVoxelMap(object):
 
         self._rgbs.append(rgb.cpu().numpy())
         rgb_idx = len(self._rgbs) - 1
-        
+
         # add observations before we start changing things
         if add_to_observations:
             self.observations.append(
@@ -478,7 +477,7 @@ class SparseVoxelMap(object):
             )
             self.instances.associate_instances_to_memory()
 
-        # Add to voxel grid        
+        # Add to voxel grid
         if feats is not None:
             feats = feats[valid_depth].reshape(-1, feats.shape[-1])
         rgb = rgb[valid_depth].reshape(-1, 3)
@@ -681,11 +680,13 @@ class SparseVoxelMap(object):
 
         # Convert metric measurements to discrete
         # Gets the xyz correctly - for now everything is assumed to be within the correct distance of origin
+        # TODO: if the pointcloud doesn't change,
+        # we can use the cached map
+        # TODO: we can get local 2d map to speed up the process
         xyz, _, counts, _ = self.voxel_pcd.get_pointcloud()
 
         device = xyz.device
         xyz = ((xyz / self.grid_resolution) + self.grid_origin).long()
-        xyz[xyz[:, -1] < 0, -1] = 0
 
         # from home_robot.utils.point_cloud import show_point_cloud
         # show_point_cloud(xyz, rgb, orig=np.zeros(3))
@@ -785,9 +786,7 @@ class SparseVoxelMap(object):
         if isinstance(xy, np.ndarray):
             xy = torch.from_numpy(xy).float()
         grid_xy = (xy / self.grid_resolution) + self.grid_origin[:2]
-        if torch.any(grid_xy >= self._grid_size_t) or torch.any(
-            grid_xy < 0
-        ):
+        if torch.any(grid_xy >= self._grid_size_t) or torch.any(grid_xy < 0):
             return None
         else:
             return grid_xy

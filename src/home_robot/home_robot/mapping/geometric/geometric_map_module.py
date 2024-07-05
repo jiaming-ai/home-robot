@@ -52,7 +52,7 @@ class GeometricMapModule(nn.Module):
         exp_pred_threshold: float,
         map_pred_threshold: float,
         min_depth: float = 0.5,
-        max_depth: float = 10, # changed to 10 m
+        max_depth: float = 10,  # changed to 10 m
         must_explore_close: bool = False,
         min_obs_height_cm: int = 25,
     ):
@@ -292,7 +292,7 @@ class GeometricMapModule(nn.Module):
 
         if self.debug_mode:
             # from home_robot.utils.point_cloud import show_point_cloud
-            from mc2.utils.visualization import show_points
+            from mc2.utils.visualization_utils import show_points
 
             rgb = obs[:, :3, :: self.du_scale, :: self.du_scale].permute(0, 2, 3, 1)
             xyz = point_cloud_t[0].reshape(-1, 3)
@@ -301,7 +301,7 @@ class GeometricMapModule(nn.Module):
             # show_point_cloud(
             #     (xyz / 100.0).cpu().numpy(), (rgb / 255.0).cpu().numpy(), orig=np.zeros(3)
             # )
-            show_points(xyz, [rgb/255.0])
+            show_points(xyz, [rgb / 255.0])
 
         point_cloud_base_coords = du.transform_camera_view_t(
             point_cloud_t, agent_height, torch.rad2deg(tilt).cpu().numpy(), device
@@ -319,7 +319,7 @@ class GeometricMapModule(nn.Module):
             # show_point_cloud(
             #     (xyz / 100.0).cpu().numpy(), (rgb / 255.0).cpu().numpy(), orig=np.zeros(3)
             # )
-            show_points(xyz, [rgb/255.0])
+            show_points(xyz, [rgb / 255.0])
 
         point_cloud_map_coords = du.transform_pose_t(
             point_cloud_base_coords, self.shift_loc, device
@@ -331,7 +331,7 @@ class GeometricMapModule(nn.Module):
             # show_point_cloud(
             #     (xyz / 100.0).cpu().numpy(), (rgb / 255.0).cpu().numpy(), orig=np.zeros(3)
             # )
-            show_points(xyz, [rgb/255.0])
+            show_points(xyz, [rgb / 255.0])
 
         voxel_channels = 1
 
@@ -376,12 +376,12 @@ class GeometricMapModule(nn.Module):
         voxels = du.splat_feat_nd(init_grid, feat, XYZ_cm_std).transpose(2, 3)
 
         if self.debug_mode:
-            from mc2.utils.visualization import show_voxel_with_prob
-            voxels_show = voxels[0,0].permute(2, 0, 1).cpu() # (H, W, D)
-            voxels_show[voxels_show==0] = -1
+            from mc2.utils.visualization_utils import show_voxel_with_prob
+
+            voxels_show = voxels[0, 0].permute(2, 0, 1).cpu()  # (H, W, D)
+            voxels_show[voxels_show == 0] = -1
             voxels_show = np.clip(voxels_show, -2, 1)
             show_voxel_with_prob(voxels_show)
-            
 
         agent_height_proj = voxels[
             ..., self.min_mapped_height : self.max_mapped_height
@@ -471,11 +471,13 @@ class GeometricMapModule(nn.Module):
         if self.debug_mode:
             # import matplotlib.pyplot as plt
             import matplotlib
-            matplotlib.use('TkAgg',force=True)
-            from matplotlib import pyplot as plt
-            print("Switched to:",matplotlib.get_backend())
 
-            rgb = obs[0,:3].permute(1,2,0).cpu().numpy() / 255.0
+            matplotlib.use("TkAgg", force=True)
+            from matplotlib import pyplot as plt
+
+            print("Switched to:", matplotlib.get_backend())
+
+            rgb = obs[0, :3].permute(1, 2, 0).cpu().numpy() / 255.0
 
             explored = current_map[0, MC.EXPLORED_MAP].cpu().numpy()
             been_close = current_map[0, MC.BEEN_CLOSE_MAP].cpu().numpy()
@@ -490,10 +492,10 @@ class GeometricMapModule(nn.Module):
             plt.imshow(obs)
             plt.subplot(236)
             plt.imshow(been_close * obs)
-            
+
             plt.subplot(235)
             plt.imshow(rgb)
-            
+
             plt.show()
             # breakpoint()
 
