@@ -62,7 +62,7 @@ else
 fi
 
 # Run the data downloader script
-# bash $HOME_ROBOT_ROOT/download_data.sh
+bash $HOME_ROBOT_ROOT/download_data.sh
 
 echo ""
 if [ "$data_only" = false ]; then
