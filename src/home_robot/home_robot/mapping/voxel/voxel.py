@@ -427,7 +427,6 @@ class SparseVoxelMap(object):
             )
 
         self._rgbs.append(rgb.cpu().numpy())
-        rgb_idx = len(self._rgbs) - 1
 
         # add observations before we start changing things
         if add_to_observations:
@@ -473,7 +472,6 @@ class SparseVoxelMap(object):
                 pose=base_pose,
                 encoder=self.encoder,
                 feat=instance_feats,
-                obs_idx=rgb_idx,
             )
             self.instances.associate_instances_to_memory()
 

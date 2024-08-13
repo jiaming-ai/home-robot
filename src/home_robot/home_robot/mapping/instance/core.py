@@ -63,9 +63,7 @@ class InstanceView:
     pose: Tensor = None
     """ Base pose of the robot when this view was collected"""
 
-    obs_idx: Optional[int] = None
-    
-    def draw_bbox(self,image, color=(0, 255, 0)):
+    def draw_bbox(self, image, color=(0, 255, 0)):
         bbox = self.bbox
         bbox = bbox.cpu().numpy().astype(int)
         x1, y1 = bbox[0]
@@ -78,7 +76,7 @@ class InstanceView:
         cv2.rectangle(image, (y1, x1), (y2, x2), color, 1)
         # cv2.rectangle(image, (bbox[0,1], bbox[0,0]), (bbox[1,1], bbox[1,0]), color, 2)
         return image
-    
+
     @cached_property
     def object_coverage(self):
         return float(self.mask.sum()) / self.mask.size
@@ -132,8 +130,15 @@ class Instance:
     """Confidence score of bbox detection"""
     score_aggregation_method: str = "max"
 
+    efficient_storage: bool = True
+    aggr_image_embedding: Optional[Tensor] = None
+
     def get_image_embedding(self, aggregation_method="max", normalize: bool = True):
         """Get the combined image embedding across all views"""
+
+        if self.aggr_image_embedding is not None:
+            return self.aggr_image_embedding.squeeze(0)
+
         view_embeddings = [view.embedding for view in self.instance_views]
         if len(view_embeddings) > 0 and view_embeddings[0] is None:
             return [None] * len(view_embeddings)
@@ -155,8 +160,8 @@ class Instance:
 
     def get_obs_idxs(self):
         """Get the observation indices of all views in this instance."""
-        return [view.obs_idx for view in self.instance_views]
-    
+        return [view.timestep for view in self.instance_views]
+
     def get_best_view(self, metric: str = "area") -> InstanceView:
         """Get best view by some metric."""
         best_view = None
@@ -175,34 +180,72 @@ class Instance:
         return best_view
 
     def add_instance_view(self, instance_view: InstanceView):
+        if self.efficient_storage:
+            self.add_instance_view_simplified(instance_view)
+
+        else:
+            if len(self.instance_views) == 0:
+                # instantiate from instance
+                self.category_id = instance_view.category_id
+                self.instance_views.append(instance_view)
+                self.bounds = instance_view.bounds
+                self.point_cloud = instance_view.point_cloud
+                self.point_cloud_rgb = instance_view.point_cloud_rgb
+                self.point_cloud_features = instance_view.point_cloud_features
+                self.score = instance_view.score
+            else:
+                # Right now we concatenate point clouds
+                # To keep the number of points manageable, we could make the pointcloud a VoxelizedPointcloud class
+                self.point_cloud = torch.cat(
+                    [self.point_cloud, instance_view.point_cloud], dim=0
+                )
+                if self.point_cloud_rgb is not None:
+                    self.point_cloud_rgb = torch.cat(
+                        [self.point_cloud_rgb, instance_view.point_cloud_rgb],
+                        dim=0,
+                    )
+                if self.point_cloud_features is not None:
+                    self.point_cloud_features = torch.cat(
+                        [
+                            self.point_cloud_features,
+                            instance_view.point_cloud_features,
+                        ],
+                        dim=0,
+                    )
+                if self.score is None:
+                    self.score = instance_view.score
+                elif self.score_aggregation_method == "max":
+                    self.score = max(self.score, instance_view.score)
+                elif self.score_aggregation_method == "mean":
+                    self.score = (
+                        self.score * len(self.instance_views) + instance_view.score
+                    ) / (len(self.instance_views) + 1)
+                else:
+                    raise NotImplementedError(
+                        f'Unknown score_aggregation_method "{self.score_aggregation_method}"'
+                    )
+
+                # add instance view to global instance
+                # do this last because we use the current length for computing average score above
+                self.instance_views.append(instance_view)
+
+                self.bounds = get_bounds(self.point_cloud)
+
+    def add_instance_view_simplified(self, instance_view: InstanceView):
+        """only add necessary fields"""
+        simple_instance_view = InstanceView(
+            bbox=instance_view.bbox,
+            bounds=instance_view.bounds,
+            timestep=instance_view.timestep,
+        )
         if len(self.instance_views) == 0:
             # instantiate from instance
             self.category_id = instance_view.category_id
-            self.instance_views.append(instance_view)
+            self.instance_views.append(simple_instance_view)
             self.bounds = instance_view.bounds
-            self.point_cloud = instance_view.point_cloud
-            self.point_cloud_rgb = instance_view.point_cloud_rgb
-            self.point_cloud_features = instance_view.point_cloud_features
             self.score = instance_view.score
+            self.aggr_image_embedding = instance_view.embedding
         else:
-            # Right now we concatenate point clouds
-            # To keep the number of points manageable, we could make the pointcloud a VoxelizedPointcloud class
-            self.point_cloud = torch.cat(
-                [self.point_cloud, instance_view.point_cloud], dim=0
-            )
-            if self.point_cloud_rgb is not None:
-                self.point_cloud_rgb = torch.cat(
-                    [self.point_cloud_rgb, instance_view.point_cloud_rgb],
-                    dim=0,
-                )
-            if self.point_cloud_features is not None:
-                self.point_cloud_features = torch.cat(
-                    [
-                        self.point_cloud_features,
-                        instance_view.point_cloud_features,
-                    ],
-                    dim=0,
-                )
             if self.score is None:
                 self.score = instance_view.score
             elif self.score_aggregation_method == "max":
@@ -216,11 +259,17 @@ class Instance:
                     f'Unknown score_aggregation_method "{self.score_aggregation_method}"'
                 )
 
-            # add instance view to global instance
-            # do this last because we use the current length for computing average score above
-            self.instance_views.append(instance_view)
+            self.instance_views.append(simple_instance_view)
+            # update bounds
+            self.bounds[:, 0] = torch.min(self.bounds, instance_view.bounds)[:, 0]
+            self.bounds[:, 1] = torch.max(self.bounds, instance_view.bounds)[:, 1]
 
-            self.bounds = get_bounds(self.point_cloud)
+            # update embedding
+            assert self.aggr_image_embedding is not None
+            alpha = 1 / len(self.instance_views)
+            self.aggr_image_embedding = (
+                1 - alpha
+            ) * self.aggr_image_embedding + alpha * instance_view.embedding
 
     def _show_point_cloud_open3d(self, **kwargs):
         from home_robot.utils.point_cloud import show_point_cloud

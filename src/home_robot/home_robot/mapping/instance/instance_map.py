@@ -347,7 +347,7 @@ class InstanceMemory:
                     )
                 else:
                     instance_view_embedding = None
-                
+
                 # TODO: filter instance based on bounding box with minimum overlap
                 # or instances close to the target instance
                 # filter by category id is not a good idea, since the detector may not be perfect
@@ -477,6 +477,7 @@ class InstanceMemory:
             )
             self.instances[env_id][global_instance_id] = global_instance
         global_instance.add_instance_view(instance_view)
+        # global_instance.add_instance_view_simplified(instance_view)
 
         if self.debug_visualize:
             cat_id = int(instance_view.category_id)
@@ -603,7 +604,6 @@ class InstanceMemory:
         pose: Optional[Tensor] = None,
         encoder: Optional[ClipEncoder] = None,
         feat: Optional[Tensor] = None,
-        obs_idx: Optional[int] = None,
     ):
         """
         Process instance information in the current frame and add instance views to the list of unprocessed views for future association.
@@ -757,7 +757,7 @@ class InstanceMemory:
 
             # get embedding
             if feat is not None:
-                embedding = feat[instance_id].unsqueeze(0) #
+                embedding = feat[instance_id].unsqueeze(0)  #
             elif encoder is not None:
                 embedding = encoder.encode_image(cropped_image).to(cropped_image.device)
             else:
@@ -800,7 +800,6 @@ class InstanceMemory:
                         score=score,
                         bounds=bounds,  # .cpu().numpy(),
                         pose=pose,
-                        obs_idx=obs_idx,
                     )
                     # append instance view to list of instance views
                     self.unprocessed_views[env_id][instance_id.item()] = instance_view
