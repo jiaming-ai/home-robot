@@ -851,6 +851,10 @@ class SparseVoxelMap(object):
         from home_robot.utils.bboxes_3d_plotly import plot_scene_with_bboxes
 
         points, rgb = self.get_xyz_rgb()
+        if plot_scene_kwargs.get("filter_max_height", None) is not None:
+            filter_mask = points[:, 2] < plot_scene_kwargs["filter_max_height"]
+            points = points[filter_mask]
+            rgb = rgb[filter_mask]
 
         traces = {}
 
