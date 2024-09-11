@@ -25,6 +25,17 @@ class Action:
     pass
 
 
+class PointGoalAction(Action):
+    """Continuous point goal action."""
+
+    delta_xy: np.ndarray
+
+    def __init__(self, xy: np.ndarray):
+        if not len(xy) == 2:
+            raise RuntimeError("point goal action space has 2 dimentions, x and y")
+        self.delta_xy = xy
+
+
 class DiscreteNavigationAction(Action, Enum):
     """Discrete navigation controls."""
 
